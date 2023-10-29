@@ -82,7 +82,7 @@ By default, this will compile all the contracts contained in the `lib`, `script`
 If you prefer to build only the files contained in a specific folder (e.g. the `src`), you can simply run it with the `-C <PATH>` flag:
 
 ```shell
-`forge build -C src`
+forge build -C src
 ```
 
 ### Testing
