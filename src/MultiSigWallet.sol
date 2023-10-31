@@ -21,10 +21,12 @@ contract MultiSigWallet {
     mapping(address => bool) public isOwner;
     uint256 public required;
     mapping(uint256 => mapping(address => bool)) public approved;
+    uint256 public constant MAX_DURATION = 30 days;
 
     struct Transaction {
         address to;
         uint256 value;
+        uint256 expireAt;
         bytes data;
         bool executed;
     }
@@ -57,6 +59,11 @@ contract MultiSigWallet {
         _;
     }
 
+    modifier notExpired(uint256 txId) {
+        require(transactions[txId].expireAt > block.timestamp, "tx expired");
+        _;
+    }
+
     constructor(address[] memory owners_, uint256 required_) {
         require(owners_.length > 0, "owners required");
         require(required_ > 0 && required_ <= owners_.length, "invalid required number of owners");
@@ -82,11 +89,13 @@ contract MultiSigWallet {
     /// @notice Submit a transaction to be approved and emit Submit event with the current transaction id
     /// @param to the recipient address of the transaction
     /// @param value the amount to send to the recipient
+    /// @param expireAt expiration time up until the transaction is valid
     /// @param data any additional data to be sent to the recipient (e.g. a message)
     /// @dev the `onlyOwner` modifier can be replaced by a more granular access control function
     /// the transaction id count starts from 0 and it is incremented for every new submitted transaction
-    function submit(address to, uint256 value, bytes calldata data) external onlyOwner {
-        transactions.push(Transaction({to: to, value: value, data: data, executed: false}));
+    function submit(address to, uint256 value, uint256 expireAt, bytes calldata data) external onlyOwner {
+        require(expireAt > block.timestamp && expireAt <= block.timestamp + MAX_DURATION, "tx expiration invalid");
+        transactions.push(Transaction({to: to, value: value, expireAt: expireAt, data: data, executed: false}));
 
         emit Submit(transactions.length - 1);
     }
@@ -94,7 +103,14 @@ contract MultiSigWallet {
     /// @notice Approve a previously submitted transaction and emit Approve event with the sender address and the transaction id
     /// @param txId the id of the transaction to be approved
     /// @dev the approver should have not approved the transaction and this transaction should not have `executed` flat set to true
-    function approve(uint256 txId) external onlyOwner txExists(txId) notApproved(txId) notExecuted(txId) {
+    function approve(uint256 txId)
+        external
+        onlyOwner
+        txExists(txId)
+        notApproved(txId)
+        notExecuted(txId)
+        notExpired(txId)
+    {
         approved[txId][msg.sender] = true;
 
         emit Approve(msg.sender, txId);
@@ -103,7 +119,7 @@ contract MultiSigWallet {
     /// @notice Revoke the approval for a previously submitted transaction and emit Revoke event with the sender address and the transaction id
     /// @param txId the id of the transaction to be revoked
     /// @dev the caller should have approved the transaction before revoking the approval and the transaction should not have `executed` flat set to true
-    function revoke(uint256 txId) external onlyOwner txExists(txId) notExecuted(txId) {
+    function revoke(uint256 txId) external onlyOwner txExists(txId) notExecuted(txId) notExpired(txId) {
         require(approved[txId][msg.sender], "tx not approved");
         approved[txId][msg.sender] = false;
 
@@ -125,7 +141,7 @@ contract MultiSigWallet {
 
     /// @notice Execute a transaction which has received sufficient approvals and emit Execute event with the transaction id
     /// @param txId the id of the transaction to be executed
-    function execute(uint256 txId) external txExists(txId) notExecuted(txId) {
+    function execute(uint256 txId) external txExists(txId) notExecuted(txId) notExpired(txId) {
         require(_getApprovalCount(txId) >= required, "not enough approvals");
         Transaction storage transaction = transactions[txId];
         require(address(this).balance >= transaction.value, "not enough balance");
