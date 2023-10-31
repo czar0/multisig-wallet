@@ -183,10 +183,13 @@ Submit (only propose) the transaction which will send:
 
 - `1 ether`
 - to `RECIPIENT`
+- setting expiration time to `1 days`
+  - Execute this command to assign this value to an environment variable: `EXPIRATION=$(($(cast block latest -f timestamp) + 86400))`
 - with message `gm` (hexed)
+  - you can use `cast from-utf8 <text>` command
 
 ```shell
-cast send --private-key ${OWNERS_PK[1]} ${CONTRACT} "submit(address,uint256,bytes)" ${RECIPIENT} 1ether 0x676d
+cast send --private-key ${OWNERS_PK[1]} ${CONTRACT} "submit(address,uint256,uint256,bytes)" ${RECIPIENT} 1ether ${EXPIRATION} 0x676d
 ```
 
 Note that we are using `cast send` to sign and publish a transaction (this will alter the world state).
@@ -194,12 +197,12 @@ Note that we are using `cast send` to sign and publish a transaction (this will 
 Let's check our transaction was correctly inserted:
 
 ```shell
-cast call ${CONTRACT} "transactions(uint256)(address,uint256,bytes,bool)" 0
+cast call ${CONTRACT} "transactions(uint256)(address,uint256,uint256,bytes,bool)" 0
 ```
 
 2 . 👍 **approve**
 
-As the default threshold policy is set to the `uint(numberOfOwners/2 + 1)` (ceiling), for `3` owners we will require `uint(3/2 + 1) = 2` approvals (*spoiler: nevertheless, as any well-respected story, there will be a twist, get ready 🍿):
+As the default threshold policy is set to the `uint(numberOfOwners/2 + 1)` (ceiling), for `3` owners we will require `uint(3/2 + 1) = 2` approvals (\*spoiler: nevertheless, as any well-respected story, there will be a twist, get ready 🍿):
 
 `OWNER1` approves:
 
@@ -272,7 +275,7 @@ cast send --private-key ${OWNERS_PK[1]} ${CONTRACT} "execute(uint256)" 0
 And there it is:
 
 ```shell
-cast call ${CONTRACT} "transactions(uint256)(address,uint256,bytes,bool)" 0
+cast call ${CONTRACT} "transactions(uint256)(address,uint256,uint256,bytes,bool)" 0
 ```
 
 And our lucky 🐰 can count their money 🤑:

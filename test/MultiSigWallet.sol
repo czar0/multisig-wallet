@@ -13,6 +13,7 @@ contract MultiSigWalletTest is Test {
     struct Transaction {
         address to;
         uint256 value;
+        uint256 expireAt;
         bytes data;
         bool executed;
     }
@@ -56,26 +57,44 @@ contract MultiSigWalletTest is Test {
         vm.expectEmit();
         emit Submit(0);
 
+        uint256 expiration = block.timestamp + 1;
         vm.prank(owners[0]);
-        wallet.submit(address(123), 1 ether, "gm");
-        (address to, uint256 value, bytes memory data, bool executed) = wallet.transactions(0);
+        wallet.submit(address(123), 1 ether, expiration, "gm");
+        (address to, uint256 value, uint256 expireAt, bytes memory data, bool executed) = wallet.transactions(0);
         assertEq(to, address(123));
         assertEq(value, 1 ether);
         assertEq(data, bytes("gm"));
+        assertEq(expireAt, expiration);
         assertFalse(executed);
+    }
+
+    // Onwers should not be able to submit a transaction with an expiration time in the present or past
+    function test_submit_RevertIf_TxExpirationInThePast() public {
+        vm.prank(owners[0]);
+        vm.expectRevert("tx expiration invalid");
+        wallet.submit(address(123), 1 ether, block.timestamp, "gm");
+    }
+
+    // Onwers should not be able to submit a transaction with an expiration time greater than MAX_DURATION
+    function test_submit_RevertIf_TxExpirationOverMaxDuration() public {
+        vm.startPrank(owners[0]);
+        // note: putting this line directly in the contract call will make vm.expectRevert to fail as it will check the result of wallet.MAX_DURATION()
+        uint256 expiration = block.timestamp + wallet.MAX_DURATION() + 1;
+        vm.expectRevert("tx expiration invalid");
+        wallet.submit(address(123), 1 ether, expiration, "gm");
     }
 
     // Non-owners should not be able to submit a transaction
     function test_submit_RevertIf_NonOwner() public {
         vm.prank(address(123));
         vm.expectRevert("not owner");
-        wallet.submit(address(123), 1 ether, "gm");
+        wallet.submit(address(123), 1 ether, block.timestamp + 1, "gm");
     }
 
     // An owner should be able to approve a transaction that has already been submitted (`txId` exists)
     function test_approve_OwnerCanApprove() public {
         vm.startPrank(owners[0]);
-        wallet.submit(address(123), 1 ether, "gm");
+        wallet.submit(address(123), 1 ether, block.timestamp + 1, "gm");
 
         vm.expectEmit();
         emit Approve(owners[0], 0);
@@ -86,10 +105,19 @@ contract MultiSigWalletTest is Test {
     // Non-owners should not be able to approve a transaction
     function test_approve_RevertIf_NonOwner() public {
         vm.prank(owners[0]);
-        wallet.submit(address(123), 1 ether, "gm");
+        wallet.submit(address(123), 1 ether, block.timestamp + 1, "gm");
 
         vm.prank(address(123));
         vm.expectRevert("not owner");
+        wallet.approve(0);
+    }
+
+    // Approve should revert if the transaction has expired
+    function test_approve_RevertIf_TxExpired() public {
+        vm.startPrank(owners[0]);
+        wallet.submit(address(123), 1 ether, block.timestamp + 1, "gm");
+        vm.warp(block.timestamp + 2);
+        vm.expectRevert("tx expired");
         wallet.approve(0);
     }
 
@@ -103,7 +131,7 @@ contract MultiSigWalletTest is Test {
     // An owner should not be able to approve a transaction that they have already approved
     function test_approve_RevertIf_OwnerAlreadyApproved() public {
         vm.startPrank(owners[0]);
-        wallet.submit(address(123), 1 ether, "gm");
+        wallet.submit(address(123), 1 ether, block.timestamp + 1, "gm");
         wallet.approve(0);
 
         vm.expectRevert("tx already approved");
@@ -113,7 +141,7 @@ contract MultiSigWalletTest is Test {
     // An owner should be able to revoke a transaction that has already been submitted (`txId` exists) and approved
     function test_revoke_OwnerCanRevoke() public {
         vm.startPrank(owners[0]);
-        wallet.submit(address(123), 1 ether, "gm");
+        wallet.submit(address(123), 1 ether, block.timestamp + 1, "gm");
         wallet.approve(0);
 
         vm.expectEmit();
@@ -126,7 +154,7 @@ contract MultiSigWalletTest is Test {
     // An owner should not be able to revoke a transaction that they haven't already approved
     function test_revoke_RevertIf_OwnerDidNotApprove() public {
         vm.startPrank(owners[0]);
-        wallet.submit(address(123), 1 ether, "gm");
+        wallet.submit(address(123), 1 ether, block.timestamp + 1, "gm");
 
         vm.expectRevert("tx not approved");
         wallet.revoke(0);
@@ -135,10 +163,20 @@ contract MultiSigWalletTest is Test {
     // Non-owners should not be able to revoke a transaction
     function test_revoke_RevertIf_NonOwner() public {
         vm.prank(owners[0]);
-        wallet.submit(address(123), 1 ether, "gm");
+        wallet.submit(address(123), 1 ether, block.timestamp + 1, "gm");
 
         vm.prank(address(123));
         vm.expectRevert("not owner");
+        wallet.revoke(0);
+    }
+
+    // Revoke should revert if the transaction has expired
+    function test_revoke_RevertIf_TxExpired() public {
+        vm.startPrank(owners[0]);
+        wallet.submit(address(123), 1 ether, block.timestamp + 1, "gm");
+        wallet.approve(0);
+        vm.warp(block.timestamp + 2);
+        vm.expectRevert("tx expired");
         wallet.revoke(0);
     }
 
@@ -152,7 +190,7 @@ contract MultiSigWalletTest is Test {
     // An owner should not be able to revoke a transaction that they did not approved
     function test_revoke_RevertIf_TxNotApproved() public {
         vm.startPrank(owners[0]);
-        wallet.submit(address(123), 1 ether, "gm");
+        wallet.submit(address(123), 1 ether, block.timestamp + 1, "gm");
         wallet.approve(0);
         wallet.revoke(0);
 
@@ -168,7 +206,7 @@ contract MultiSigWalletTest is Test {
         vm.startPrank(owners[0]);
         payable(address(wallet)).transfer(5 ether);
         assertEq(address(wallet).balance, 5 ether);
-        wallet.submit(address(123), 1 ether, "gm");
+        wallet.submit(address(123), 1 ether, block.timestamp + 1, "gm");
         vm.stopPrank();
 
         for (uint256 i = 0; i < REQUIRED; ++i) {
@@ -180,10 +218,7 @@ contract MultiSigWalletTest is Test {
         emit Execute(0);
 
         wallet.execute(0);
-        (address to, uint256 value, bytes memory data, bool executed) = wallet.transactions(0);
-        assertEq(to, address(123));
-        assertEq(value, 1 ether);
-        assertEq(data, bytes("gm"));
+        (,,,, bool executed) = wallet.transactions(0);
         assertTrue(executed);
         assertEq(address(123).balance, 1 ether);
     }
@@ -196,7 +231,7 @@ contract MultiSigWalletTest is Test {
         vm.startPrank(owners[0]);
         payable(address(wallet)).transfer(5 ether);
         assertEq(address(wallet).balance, 5 ether);
-        wallet.submit(address(123), 1 ether, "gm");
+        wallet.submit(address(123), 1 ether, block.timestamp + 1, "gm");
         vm.stopPrank();
 
         for (uint256 i = 0; i < REQUIRED; ++i) {
@@ -212,10 +247,31 @@ contract MultiSigWalletTest is Test {
         wallet.execute(0);
     }
 
+    // Execute should revert if the transaction has expired
+    function test_execute_RevertIf_TxExpired() public {
+        deal(owners[0], 5 ether);
+        assertEq(owners[0].balance, 5 ether);
+
+        vm.startPrank(owners[0]);
+        payable(address(wallet)).transfer(5 ether);
+        assertEq(address(wallet).balance, 5 ether);
+        wallet.submit(address(123), 1 ether, block.timestamp + 1, "gm");
+        vm.stopPrank();
+
+        for (uint256 i = 0; i < REQUIRED; ++i) {
+            vm.prank(owners[i]);
+            wallet.approve(0);
+        }
+
+        vm.warp(block.timestamp + 2);
+        vm.expectRevert("tx expired");
+        wallet.execute(0);
+    }
+
     // An owner should not be able to execute a transaction that did not reach the threshod of approvals set in `REQUIRED`
     function test_execute_RevertIf_NotEnoughApprovals() public {
         vm.prank(owners[0]);
-        wallet.submit(address(123), 1 ether, "gm");
+        wallet.submit(address(123), 1 ether, block.timestamp + 1, "gm");
 
         for (uint256 i = 0; i < REQUIRED - 1; ++i) {
             vm.prank(owners[i]);
@@ -234,7 +290,7 @@ contract MultiSigWalletTest is Test {
         vm.startPrank(owners[0]);
         payable(address(wallet)).transfer(0.1 ether);
         assertEq(address(wallet).balance, 0.1 ether);
-        wallet.submit(address(123), 1 ether, "gm");
+        wallet.submit(address(123), 1 ether, block.timestamp + 1, "gm");
         vm.stopPrank();
 
         for (uint256 i = 0; i < REQUIRED; ++i) {
