@@ -183,7 +183,7 @@ Submit (only propose) the transaction which will send:
 
 - `1 ether`
 - to `RECIPIENT`
-- setting expiration time to `1 days`
+- setting expiration time to `86400` seconds (24 hours)
   - Execute this command to assign this value to an environment variable: `EXPIRATION=$(($(cast block latest -f timestamp) + 86400))`
 - with message `gm` (hexed)
   - you can use `cast from-utf8 <text>` command
@@ -246,7 +246,7 @@ cast call ${CONTRACT} "approved(uint256,address)(bool)" 0 ${OWNER2}
 
 And yup, it is as bad as we thought. Our lucky 🐰 might not get their prize, and people might just lose faith in the DAO project: a total disaster 😭.
 
-And, when we think everything is lost...from literally nowhere, a masked hero 🦸🏿 comes to the rescue...it's `OWNER3`! (what a plot twist! 🙄):
+And, when we think everything is lost...a masked hero 🦸🏿 comes to the rescue...it's `OWNER3`! (what a plot twist! 🙄):
 
 ```shell
 cast send --private-key ${OWNERS_PK[3]} ${CONTRACT} "approve(uint256)" 0

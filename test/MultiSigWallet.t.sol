@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import {Test, console2} from "forge-std/Test.sol";
+import "forge-std/Test.sol";
 import {MultiSigWallet} from "../src/MultiSigWallet.sol";
 
 contract MultiSigWalletTest is Test {

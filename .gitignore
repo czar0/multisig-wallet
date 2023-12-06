@@ -1,4 +1,4 @@
-# Foundry
+# foundry-related
 cache/
 out/
 .gas-snapshot
@@ -7,9 +7,8 @@ out/
 /broadcast/**/dry-run/
 docs/
 
-# Dotenv file
+# general
 .env
-
-# Rubbish
+.vscode/
 .DS_Store
 
